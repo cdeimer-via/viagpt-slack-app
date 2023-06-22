@@ -1,6 +1,8 @@
 import os
+import json
 # Use the package we installed
 from slack_bolt import App
+from websockets.sync.client import connect
 
 # Initializes your app with your bot token and signing secret
 app = App(
@@ -63,21 +65,33 @@ def update_home_tab(client, event, logger):
 def handle_message_events(body, logger):
     message_body = body["event"]["text"]
     channel_id = body["event"]["channel"]
+    response = None
 
     try:
-    # Call the conversations.list method using the WebClient
-        result = app.client.chat_postMessage(
-            channel=channel_id,
-            text=message_body
+        viagpt_object = {
+           "id": 1,
+           "prompt": message_body
+        }
+        # Pass the user message to VIAGPT
+        with connect("wss://hns-viagpt.dev.platform-services.dev1.poweredbyvia.com/viagpt/documentation") as websocket:
+            websocket.send(json.dumps(viagpt_object))
+            websocket_response = json.loads(websocket.recv())
+            if websocket_response:
+                response = websocket_response["spec"]
+
+        # Call the conversations.list method using the WebClient
+        app.client.chat_postMessage(
+            channel = channel_id,
+            text = response if response else message_body 
             # You could also use a blocks[] array to send richer content
         )
-        # Print result, which includes information about the message (like TS)
-        print(result)
     except Exception as e:
+        app.client.chat_postMessage(
+            channel = channel_id,
+            text = f"Error posting chat message: {e}"
+            # You could also use a blocks[] array to send richer content
+        )
         logger.error(f"Error posting chat message: {e}")
-
-
-    print(message_body, channel_id)
 
 # Start your app
 if __name__ == "__main__":
